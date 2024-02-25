@@ -35,12 +35,12 @@ with st.form("input", clear_on_submit=True):
             else:
                 new_query = f"word[{pos - 1}] != '{char}'"
     else:
-        char = st.selectbox("1文字選択", [alpha for alpha in "abcdefghijklmnopqrstuvwxyz"])
-        if char:
+        string = st.text_input("1文字or文字列")
+        if string:
             if type_select == "含む":
-                new_query = f"'{char}' in word"
+                new_query = f"'{string}' in word"
             else:
-                new_query = f"'{char}' not in word"
+                new_query = f"'{string}' not in word"
         
 
 
