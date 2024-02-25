@@ -22,9 +22,27 @@ if len(st.session_state["words"]) == 0:
     st.sidebar.text(f"{len(df)} data loaded.")
 words = st.session_state["words"]
 
+type_select = st.radio("タイプ選択", ["直接入力", "位置指定", "位置除外", "含む", "含まない"])
 with st.form("input", clear_on_submit=True):
+    if type_select == "直接入力":
+        new_query = st.text_input("追加するクエリ")
+    elif type_select == "位置指定" or type_select == "位置除外":
+        pos = st.number_input("何文字目？", min_value=1, max_value=5, step=1, value=None)
+        char = st.selectbox("文字を選択", [alpha for alpha in " abcdefghijklmnopqrstuvwxyz"])
+        if pos and char:
+            if type_select == "位置指定":
+                new_query = f"word[{pos - 1}] == '{char}'"
+            else:
+                new_query = f"word[{pos - 1}] != '{char}'"
+    else:
+        char = st.selectbox("1文字選択", [alpha for alpha in "abcdefghijklmnopqrstuvwxyz"])
+        if char:
+            if type_select == "含む":
+                new_query = f"'{char}' in word"
+            else:
+                new_query = f"'{char}' not in word"
+        
 
-    new_query = st.text_input("Queryを追加")
 
     if st.form_submit_button("追加"):
         if new_query not in st.session_state["query_list"]:
