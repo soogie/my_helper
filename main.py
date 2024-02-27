@@ -1,5 +1,7 @@
+import re
 import pandas as pd
 import streamlit as st
+
 
 st.title("wordle helper")
 if "query_list" not in st.session_state:
@@ -11,7 +13,13 @@ if "words" not in st.session_state:
 def word_check(words, query):
     new_words = []
     for word in words:
-        if eval(query):
+        if query[:3] == "all":
+            pattern = r"'([^']*)'"
+            string = re.findall(pattern, query)
+            if all(char not in word for char in f"{string}"):
+                new_words.append(word)
+            
+        elif eval(query):
             new_words.append(word)
     return new_words
 
@@ -22,13 +30,13 @@ if len(st.session_state["words"]) == 0:
     st.sidebar.text(f"{len(df)} data loaded.")
 words = st.session_state["words"]
 
-type_select = st.radio("タイプ選択", ["直接入力", "位置指定", "位置除外", "含む", "含まない"])
+type_select = st.radio("タイプ選択", ["直接入力", "位置指定", "位置除外", "含む", "含まない", "全部除く"])
 with st.form("input", clear_on_submit=True):
     if type_select == "直接入力":
         new_query = st.text_input("追加するクエリ")
     elif type_select == "位置指定" or type_select == "位置除外":
-        pos = st.number_input("何文字目？", min_value=1, max_value=5, step=1, value=None)
-        char = st.selectbox("文字を選択", [alpha for alpha in " abcdefghijklmnopqrstuvwxyz"])
+        pos = st.radio("何文字目？", [1, 2, 3, 4, 5], index=None, horizontal=True)
+        char = st.text_input("1文字", max_chars=1)
         if pos and char:
             if type_select == "位置指定":
                 new_query = f"word[{pos - 1}] == '{char}'"
@@ -39,6 +47,8 @@ with st.form("input", clear_on_submit=True):
         if string:
             if type_select == "含む":
                 new_query = f"'{string}' in word"
+            elif type_select == "全部除く":
+                new_query = f"all(char not in word for char in '{string}')" 
             else:
                 new_query = f"'{string}' not in word"
         
