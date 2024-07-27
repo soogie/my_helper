@@ -18,7 +18,9 @@ def word_check(words, query):
             string = re.findall(pattern, query)
             if all(char not in word for char in f"{string}"):
                 new_words.append(word)
-            
+        elif len(query) == 2:
+            if eval(query[0]) and eval(query[1]):
+                new_words.append(word)
         elif eval(query):
             new_words.append(word)
     return new_words
@@ -41,7 +43,7 @@ with st.form("input", clear_on_submit=True):
             if type_select == "位置指定":
                 new_query = f"word[{pos - 1}] == '{char}'"
             else:
-                new_query = f"word[{pos - 1}] != '{char}'"
+                new_query = [f"word[{pos - 1}] != '{char}'", f"'{char}' in word"]
     else:
         string = st.text_input("1文字or文字列")
         if string:
