@@ -28,10 +28,17 @@ def word_check(words, query):
 
 if len(st.session_state["words"]) == 0:
     df = pd.read_pickle("data/fivewords.pkl")
-    st.session_state["words"] = df["word"]
+    with open("history250101.csv", "r") as f:
+        history = f.read().split(",")
+        history = [h.lower() for h in history]
+
+    st.session_state["words"] = list(df["word"])
+    st.session_state["history"] = history
     st.sidebar.text(f"{len(df)} data loaded.")
 words = st.session_state["words"]
+history = st.session_state["history"]
 
+mode_select = st.radio("history", ["ON", "OFF"], index=1)
 type_select = st.radio("タイプ選択", ["直接入力", "位置指定", "位置除外", "含む", "含まない", "全部除く"])
 with st.form("input", clear_on_submit=True):
     if type_select == "直接入力":
@@ -68,9 +75,14 @@ if len(st.session_state["query_list"]) > 0:
 
 if st.sidebar.button("クエリ削除"):
     st.session_state["query_list"] = []
-    
 
-st.markdown(", ".join(words))
+# modeをOFFにしたときのためにhistoryと突き合わせる前のwordsは残しておき、表示用のwords2を作る
+words2 = words.copy()
+if mode_select == "ON":
+    for word in words2.copy():
+        if word in history:
+            words2.remove(word)
 
+st.markdown(", ".join(words2))
     
     
