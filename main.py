@@ -28,7 +28,7 @@ def word_check(words, query):
 
 if len(st.session_state["words"]) == 0:
     df = pd.read_pickle("data/fivewords.pkl")
-    with open("history250101.csv", "r") as f:
+    with open("history250301.csv", "r") as f:
         history = f.read().split(",")
         history = [h.lower() for h in history]
 
@@ -75,6 +75,7 @@ if len(st.session_state["query_list"]) > 0:
 
 if st.sidebar.button("クエリ削除"):
     st.session_state["query_list"] = []
+    st.rerun()
 
 # modeをOFFにしたときのためにhistoryと突き合わせる前のwordsは残しておき、表示用のwords2を作る
 words2 = words.copy()
