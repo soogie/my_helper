@@ -23,8 +23,16 @@ def word_check(words, query):
                 string = re.findall(pattern, query)
                 if all(char not in word for char in f"{string[0]}"):
                     new_words.append(word)
-            elif eval(query):
-                new_words.append(word)
+            else:
+                try:
+                    res = eval(query)
+                except SyntaxError as e:
+                    raise Exception(f"SyntaxError in {query}")
+                except NameError as e:
+                    raise Exception(f"NameError in {query}")
+                    
+                if res:
+                    new_words.append(word)
         elif isinstance(query, list):
             if len(query) == 2:
                 if eval(query[0]) and eval(query[1]):
