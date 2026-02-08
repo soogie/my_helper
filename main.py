@@ -47,7 +47,7 @@ def load_data():
         A tuple containing the list of words and the history list.
     """
     df = pd.read_pickle("data/fivewords.pkl")
-    with open("history250301.csv", "r") as f:
+    with open("history.csv", "r") as f:  # 最新版の取得はget_history.py
         history = f.read().split(",")
         history = [h.lower() for h in history]
     return list(df["word"]), history
