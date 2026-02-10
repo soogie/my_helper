@@ -1,121 +1,170 @@
-import re
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import pickle
+import os
+import warnings
 
-# --- Core Logic (No Streamlit) ---
+# Suppress deprecation warnings from legacy pickles
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-def word_check(words, query):
-    """
-    Filters a list of words based on a query.
-
-    Args:
-        words: A list of words (strings).
-        query: A string or list of strings representing the filtering condition.
-
-    Returns:
-        A list of words that match the query.
-    """
-    new_words = []
-    for word in words:
-        if isinstance(query, str):
-            if query[:3] == "all":
-                pattern = r"'([^']*)'"
-                string = re.findall(pattern, query)
-                if all(char not in word for char in f"{string[0]}"):
-                    new_words.append(word)
-            else:
-                try:
-                    res = eval(query)
-                except SyntaxError as e:
-                    raise Exception(f"SyntaxError in {query}")
-                except NameError as e:
-                    raise Exception(f"NameError in {query}")
-                    
-                if res:
-                    new_words.append(word)
-        elif isinstance(query, list):
-            if len(query) == 2:
-                if eval(query[0]) and eval(query[1]):
-                    new_words.append(word)
-    return new_words
+# --- Configuration ---
+FIVEWORDS_PATH = 'data/fivewords.pkl'
+HISTORY_PATH = 'history.csv'
 
 def load_data():
-    """
-    Loads data (word list and history) from files.
-
-    Returns:
-        A tuple containing the list of words and the history list.
-    """
-    df = pd.read_pickle("data/fivewords.pkl")
-    with open("history.csv", "r") as f:  # 最新版の取得はget_history.py
-        history = f.read().split(",")
-        history = [h.lower() for h in history]
-    return list(df["word"]), history
-
-
-# --- Streamlit App Logic ---
-
-def main():
-    st.title("wordle helper")
-
-    if "query_list" not in st.session_state:
-        st.session_state["query_list"] = []
-
-    if "words" not in st.session_state:
-        st.session_state["words"], st.session_state["history"] = load_data()
+    """Load the candidate list and history."""
+    if not os.path.exists(FIVEWORDS_PATH):
+        st.error(f"{FIVEWORDS_PATH} not found.")
+        return [], []
     
-    words = st.session_state["words"]
-    history = st.session_state["history"]
+    try:
+        with open(FIVEWORDS_PATH, 'rb') as f:
+            data = pickle.load(f)
+            # Handle various pkl formats (list, Series, DataFrame)
+            if isinstance(data, list):
+                candidates = data
+            elif isinstance(data, pd.Series):
+                candidates = data.tolist()
+            elif isinstance(data, pd.DataFrame):
+                candidates = data.iloc[:, 0].tolist()
+            else:
+                candidates = list(data)
+    except Exception as e:
+        st.error(f"Error loading {FIVEWORDS_PATH}: {e}")
+        return [], []
+            
+    # Load history.csv (Expected: headerless, comma-separated on one or more lines)
+    history_words = []
+    if os.path.exists(HISTORY_PATH):
+        try:
+            # Try reading as headerless CSV
+            df_h = pd.read_csv(HISTORY_PATH, header=None)
+            history_words = df_h.values.flatten().tolist()
+            # Filter out NaN/invalid entries
+            history_words = [str(w).strip().upper() for w in history_words if pd.notna(w)]
+        except Exception:
+            history_words = []
+        
+    return candidates, history_words
 
-    st.sidebar.text(f"{len(words)} data loaded.")
+def save_history(word):
+    """Add a solved word to history.csv in a headerless, comma-separated format."""
+    candidates, history_words = load_data()
+    
+    word = word.strip().upper()
+    if word not in history_words:
+        history_words.append(word)
+        # Save as single row comma-separated
+        try:
+            df_new = pd.DataFrame([history_words])
+            df_new.to_csv(HISTORY_PATH, header=None, index=False)
+        except Exception as e:
+            st.error(f"Failed to save history: {e}")
 
-    mode_select = st.radio("history", ["ON", "OFF"], index=1)
-    type_select = st.radio("タイプ選択", ["直接入力", "位置指定", "位置除外", "含む", "含まない", "全部除く"])
+def is_match(candidate, guess, result):
+    """Robust Wordle filtering logic."""
+    if len(candidate) != 5:
+        return False
+    
+    candidate = candidate.upper()
+    guess = guess.upper()
+    
+    cand_list = list(candidate)
+    guess_list = list(guess)
+    
+    # 1. Check Green (2)
+    for i in range(5):
+        if result[i] == '2':
+            if candidate[i] != guess[i]:
+                return False
+            cand_list[i] = None
+            guess_list[i] = None
+            
+    # Count occurrences in candidate (excluding Greens)
+    cand_counts = {}
+    for char in cand_list:
+        if char is not None:
+            cand_counts[char] = cand_counts.get(char, 0) + 1
+            
+    # 2. Check Yellow (1)
+    for i in range(5):
+        if result[i] == '1':
+            char = guess_list[i]
+            if candidate[i] == char: # Must not be at this position
+                return False
+            if cand_counts.get(char, 0) > 0:
+                cand_counts[char] -= 1
+            else:
+                return False
+                
+    # 3. Check Gray (0)
+    for i in range(5):
+        if result[i] == '0':
+            char = guess_list[i]
+            if candidate[i] == char:
+                return False
+            # Gray means this letter doesn't appear more than we've assigned to Green/Yellow
+            if cand_counts.get(char, 0) > 0:
+                return False
+                
+    return True
 
-    with st.form("input", clear_on_submit=True):
-        new_query = "" # Initialize new_query
-        if type_select == "直接入力":
-            new_query = st.text_input("追加するクエリ")
-        elif type_select == "位置指定" or type_select == "位置除外":
-            pos = st.radio("何文字目？", [1, 2, 3, 4, 5], index=None, horizontal=True)
-            char = st.text_input("1文字", max_chars=1)
-            if pos and char:
-                if type_select == "位置指定":
-                    new_query = f"word[{pos - 1}] == '{char}'"
-                else:
-                    new_query = [f"word[{pos - 1}] != '{char}'", f"'{char}' in word"]
-        else:
-            string = st.text_input("1文字or文字列")
-            if string:
-                if type_select == "含む":
-                    new_query = f"'{string}' in word"
-                elif type_select == "全部除く":
-                    new_query = f"all(char not in word for char in '{string}')" 
-                else:
-                    new_query = f"'{string}' not in word"
+# --- Streamlit UI ---
+st.set_page_config(page_title="Wordle Helper", layout="centered")
+st.title("Wordle Helper")
 
-        if st.form_submit_button("追加"):
-            if new_query not in st.session_state["query_list"]:
-                st.session_state["query_list"].append(new_query)
+candidates, history_words = load_data()
 
-    # Sidebar
-    if len(st.session_state["query_list"]) > 0:
-        for query in st.session_state["query_list"]:
-            words = word_check(words, query)
-            st.sidebar.text(f'{query} : {str(len(words))}')
+# Exclude already solved words
+solved_set = set(history_words)
+initial_candidates = [c for c in candidates if str(c).upper() not in solved_set]
 
-    if st.sidebar.button("クエリ削除"):
-        st.session_state["query_list"] = []
+if 'filtered_list' not in st.session_state:
+    st.session_state.filtered_list = initial_candidates
+
+with st.sidebar:
+    if st.button("Reset Filter"):
+        st.session_state.filtered_list = initial_candidates
         st.rerun()
 
-    # Mode OFF
-    words2 = words.copy()
-    if mode_select == "ON":
-        for word in words2.copy():
-            if word in history:
-                words2.remove(word)
+# User Input
+user_input = st.text_input("Enter attempt (e.g. ABIDE00001):", placeholder="WORD + 5 digits (0:Gray, 1:Yellow, 2:Green)")
 
-    st.markdown(", ".join(words2))
+if user_input and len(user_input) == 10:
+    word = user_input[:5].upper()
+    result = user_input[5:]
     
-if __name__ == "__main__":
-    main()
+    if not word.isalpha() or not result.isdigit():
+        st.warning("Invalid input format. Use 5 letters followed by 5 digits.")
+    else:
+        # Filter current list
+        st.session_state.filtered_list = [c for c in st.session_state.filtered_list if is_match(str(c), word, result)]
+        st.success(f"Filtered by {word} with result {result}")
+
+# Display Results
+st.subheader(f"Candidates ({len(st.session_state.filtered_list)})")
+
+if st.session_state.filtered_list:
+    # Most likely candidate
+    top_word = str(st.session_state.filtered_list[0]).upper()
+    st.info(f"Recommended Next Guess: **{top_word}**")
+    
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.write("All Candidates:")
+        st.write(", ".join([str(c) for c in st.session_state.filtered_list]))
+    
+    with col2:
+        if st.button(f"Mark '{top_word}' as SOLVED"):
+            save_history(top_word)
+            st.success(f"Added {top_word} to history!")
+            # Re-load and reset
+            candidates, history_words = load_data()
+            solved_set = set(history_words)
+            st.session_state.filtered_list = [c for c in candidates if str(c).upper() not in solved_set]
+            st.rerun()
+else:
+    st.write("No matching candidates found.")
+
+st.divider()
+st.caption("Instructions: Enter your guess and the feedback (0: Not in word/Gray, 1: Wrong spot/Yellow, 2: Correct spot/Green).")
