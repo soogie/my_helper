@@ -112,7 +112,7 @@ class TestWordCheck(unittest.TestCase):
     def test_load_data(self):
         word, history = load_data()
         self.assertEqual(len(word),39933)
-        # self.assertEqual(len(history),1352)  # history.csv editable
+        self.assertEqual(len(history),1352)
 
 if __name__ == "__main__":
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
